@@ -1,219 +1,119 @@
-from django.shortcuts import get_object_or_404, render , redirect
-from .models import Product , Comments , Toptrend , DiscountedProducts
+from http.client import HTTPResponse
+from django.shortcuts import render
+from django.views import generic
+from django.urls import reverse_lazy
+from django import forms
+from django.contrib import messages
+from .forms import UpdateForm
+from django.contrib.auth.models import User
+
 # Create your views here.
-from .forms import Buy , CommentForm , ProductForm
-from django.http import HttpResponseForbidden, HttpResponseRedirect
-from django.contrib.auth.decorators import login_required
-from django.core.paginator import Paginator
 
-
-# def product_list(request):
-#     products = Product.objects.all()
+# class RegisterView(generic.CreateView):
+#     form_class = UserCreationForm
+#     success_url = reverse_lazy("login")
+#     template_name = "registration/register.html"
     
-#     paginator = Paginator(products, 4) # Show 4 contacts per page.
-
-#     page_number = request.GET.get('page')
-#     Products_final = paginator.get_page(page_number)
     
-#     context = {
-#         "products" : Products_final,
+from django.shortcuts import render, redirect
+from django.contrib.auth import login
+from django.contrib.auth.forms import UserCreationForm
+
+def register(request):
+    """Register a new user."""
+    if request.method != 'POST':
+        # Display blank registration form. 
+        form = UserCreationForm()
+        form.fields['username'].widget = forms.TextInput(attrs={'class': "u-border-2 u-border-grey-5 u-grey-5 u-input u-input-rectangle u-radius-10",'placeholder': 'Your Username'})
+        form.fields['password1'].widget = forms.PasswordInput(attrs={'class': "u-border-2 u-border-grey-5 u-grey-5 u-input u-input-rectangle u-radius-10", 'placeholder': 'Password'})
+        form.fields['password2'].widget = forms.PasswordInput(attrs={'class': "u-border-2 u-border-grey-5 u-grey-5 u-input u-input-rectangle u-radius-10", 'placeholder': 'Password Again'})
         
-#     }
-#     return render(request,"product/furn-master/List_final.html",context)
-
-
-
-
-
-
-def product_detail(request,id):
-    
-    
-    selected_product = get_object_or_404(Product,id=id)
-    # tags = list(selected_product.tags)
-    
-    AllComments = list(selected_product.comments.all())
-    AllPictures = list(selected_product.Pictures.all())
-    
-    if selected_product.available :
-        buy_form = Buy(quantity_m = selected_product.number)
-    else :
-        buy_form = False    
         
-    #comment part
-    
-    if request.method == "POST" :
-        form = CommentForm(request.POST)
+        
+    else:
+        # Process completed form.
+        form = UserCreationForm(data=request.POST)
+ 
         if form.is_valid():
-            obj = form.save(commit=False)
-            obj.writer = request.user
-            obj.product = selected_product
-            obj.save()
-            return HttpResponseRedirect(request.path_info)
+            new_user = form.save()
+        # Log in, redirect to home page.
+            login(request, new_user)
+            messages.success(request, 'Form submission successful')
+            return redirect(request.path_info)
+    # Display a blank or invalid form.
+    context = {'form': form}
+    return render(request,'registration/register_final.html', context)
+
+
+
+# from django.contrib.auth import login, authenticate
+# from django.contrib.auth.views import LoginView
+# from django.shortcuts import render, redirect
+
+# from .forms import SignUpForm
+
+
+# def register(request):
+#     if request.method == 'POST':
+#         form = SignUpForm(request.POST)
+#         if form.is_valid():
+#             form.save()
+#             username = form.cleaned_data.get('username')
+#             raw_password = form.cleaned_data.get('password1')
+#             user = authenticate(username=username, password=raw_password)
+#             login(request, user)
+#             return redirect('product:product_list')
+#     else:
+#         form = SignUpForm()
+#     context = {'form': form}
+#     return render(request,'registration/register_final.html', context)
+
+
+#change pass
+
+from django.contrib import messages
+from django.contrib.auth import update_session_auth_hash
+from django.contrib.auth.forms import PasswordChangeForm
+from django.shortcuts import render, redirect
+
+def change_password(request):
+    if request.method == 'POST':
+        form = PasswordChangeForm(request.user, request.POST)
+        if form.is_valid():
+            user = form.save()
+            update_session_auth_hash(request, user)  # Important!
+            messages.success(request, 'Your password was successfully updated!')
+            return redirect('accounts:change_password')
+        else:
+            messages.error(request, 'Please correct the error below.')
+    else:
+        form = PasswordChangeForm(request.user)
+    return render(request, 'registration/change_password.html', {
+        'form': form
+    })
+    
+    
+    
+    
+    #profile update
+    
+def update(request):
+    if request.method == "POST":
+        form = UpdateForm(data=request.POST , instance=request.user)
+        if form.is_valid():
+            form.save()
+            messages.success(request,"profile Updated")
     else :
-        form = CommentForm()
-        
-        
-        
+        form = UpdateForm(instance=request.user)
+    return render(request,"registration/update_profile.html",{"form":form})
+
+
+
+def DeleteAccount(request):
+    if request.method == "POST":
+        user = User.objects.get(username=request.user)
+        user.delete()
+        return HTTPResponse("your account deleted successfully")
     
-    context = {
-        "s_product" : selected_product ,
-        # "tags": tags ,
-        "buy_form1" : buy_form ,
-        "s_comments" : AllComments,
-        "s_Pictures" : AllPictures,
-        "form" : form ,
-    }
-    return render(request,"product/detail_final2.html",context)
-
-#edit product part
-
-@login_required
-def product_update(request,id):
-    selected_product = get_object_or_404(Product,id=id)
-    if request.user == selected_product.seller:
-        form = ProductForm(request.POST or None,instance=selected_product)
-        if request.method == "POST" :
-            if form.is_valid():
-                form.save()
-                # return HttpResponseRedirect("/"+"product/"+str(id))
-                return redirect('product:product_list')
-        else:
-            form = ProductForm(instance=selected_product)
-        context ={
-            "form":form,
-            "product":selected_product
-        }
-        return render(request,"product/product_update.html",context)
-    else:
-        HttpResponseForbidden
-        
-        
-@login_required
-def comment_update(request,c_id,p_id):
-    selected_product = get_object_or_404(Product,id=p_id)
-    selected_comment = get_object_or_404(Comments,id=c_id)
-    if request.user == selected_comment.writer:
-        form = CommentForm(request.POST or None,instance=selected_comment)
-        if request.method == "POST" :
-            if form.is_valid():
-                form.save()
-                # return HttpResponseRedirect("/"+"product/"+str(id))
-                return redirect("/"+"product/"+str(p_id))
-        else:
-            form = CommentForm(instance=selected_comment)
-        context ={
-            "form":form,
-            "comment":selected_comment,
-            "s_product":selected_product,
-        }
-        return render(request,"product/comment_update.html",context)
-    else:
-        HttpResponseForbidden
+    return render(request,"registration/DeleteAccount.html")
             
-    
-    
-def Product_Category(request,category):
-    
-    products = Product.objects.filter(category__slug = category)
-    
-    paginator = Paginator(products, 4) # Show 4 contacts per page.
-
-    page_number = request.GET.get('page')
-    Products_final = paginator.get_page(page_number)
-    toptrends = Toptrend.objects.all()
-    toptrends = list(toptrends)
-    context = {
-        "products" : Products_final,
-        'toptrends': toptrends[1:],
-        'active': toptrends[0]
-        
-    }
-    return render(request,"product/product_list2.html",context)
-    
-    
-    
-    
-def Product_Tag(request,tag):
-    
-    products = Product.objects.filter(tags__slug = tag)
-    
-    paginator = Paginator(products, 4) # Show 4 contacts per page.
-
-    page_number = request.GET.get('page')
-    Products_final = paginator.get_page(page_number)
-    
-    toptrends = Toptrend.objects.all()
-    toptrends = list(toptrends)
-    context = {
-        "products" : Products_final,
-        'toptrends': toptrends[1:],
-        'active': toptrends[0]
-        
-    }
-    return render(request,"product/product_list2.html",context)
-
-
-# def search(request):
-#     if request.method == "GET":
-#         q = request.GET.get("search")
-        
-#     products = Product.objects.filter(name__icontains = q)
-#     return render( request,"product/furn-master/List_final.html",{"products" : products} )
-
-from django.db.models import Q
-
-from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
-
-def product_list(request,order=None):
-    if order :
-        order = str(order)
-        products_list = Product.objects.order_by(order)
-    else:
-        products_list = Product.objects.all()
-    query = request.GET.get('q')
-    if query:
-        products_list = Product.objects.filter(
-            Q(description__icontains=query) | Q(name__icontains=query) 
-        ).distinct()
-        if order :
-            order = str(order)
-            products_list = products_list.order_by(order)
-        
-        
-        
-    paginator = Paginator(products_list, 4) # 4 products per page
-    page = request.GET.get('page')
-
-    try:
-        products = paginator.page(page)
-    except PageNotAnInteger:
-        products = paginator.page(1)
-    except EmptyPage:
-        products = paginator.page(paginator.num_pages)
-
-    
-    
-    toptrends = Toptrend.objects.all()
-    toptrends = list(toptrends)
-    D_products = DiscountedProducts.objects.all()
-    context = {
-        'products': products,
-        'toptrends': toptrends[1:],
-        'active': toptrends[0],
-        "d_products":D_products,
-    }
-    return render(request, "product/product_list2.html", context)
-
-
-@login_required
-def Dashboard(request):
-    seller = request.user
-    products = seller.products.all()
-    
-    context = {
-        'products': products,
-    }
-    return render(request, "product/Dashboard.html", context)
-    
-    
